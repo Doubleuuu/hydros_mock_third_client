@@ -90,10 +90,10 @@ public class DemoClientController {
     }
 
     @GetMapping("/callback")
-    public ResponseEntity<String> callback(@RequestParam(name = "code", required = false) String code,
-                                           @RequestParam(name = "state", required = false) String state,
-                                           @RequestParam(name = "error", required = false) String error,
-                                           HttpSession session) {
+    public ResponseEntity<?> callback(@RequestParam(name = "code", required = false) String code,
+                                      @RequestParam(name = "state", required = false) String state,
+                                      @RequestParam(name = "error", required = false) String error,
+                                      HttpSession session) {
         if (error != null) {
             return errorPage("SSO returned error: " + error);
         }
@@ -121,7 +121,7 @@ public class DemoClientController {
             session.removeAttribute(SESSION_NONCE);
             session.removeAttribute(SESSION_REDIRECT_URI);
 
-            return redirectToHtml("/", "Authorization code exchanged and ID token verified");
+            return redirect("/");
         } catch (Exception ex) {
             return errorPage("Callback failed: " + ex.getMessage());
         }
