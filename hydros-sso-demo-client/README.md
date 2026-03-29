@@ -1,6 +1,6 @@
 # hydros-sso-demo-client
 
-Minimal relying-party demo app for `hydros-sso-app`.
+Minimal relying-party demo app for Hydros SSO endpoints served by `hydros-data-app` (`http://localhost:7071` by default).
 
 ## Flow
 

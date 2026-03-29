@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "demo.sso")
 public class DemoSsoProperties {
 
-    private String issuer = "http://localhost:9090";
+    private String issuer = "http://localhost:7071";
     private String clientId = "demo-client";
     private String clientSecret = "demo-client-secret";
     private String redirectUri = "http://localhost:9091/callback";

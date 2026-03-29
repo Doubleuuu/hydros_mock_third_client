@@ -11,7 +11,7 @@ server:
 
 demo:
   sso:
-    issuer: http://localhost:9090
+    issuer: http://localhost:7071
     client-id: demo-client
     client-secret: demo-client-secret
     redirect-uri: http://localhost:9091/callback
