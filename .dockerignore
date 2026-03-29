@@ -1,0 +1,12 @@
+# .dockerignore
+.git
+.gitignore
+build.gradle
+gradle
+.gradle
+.idea
+*.iml
+*.log
+*.md
+*.sh
+*.jar
