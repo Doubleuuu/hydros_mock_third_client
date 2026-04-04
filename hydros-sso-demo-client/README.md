@@ -1,6 +1,7 @@
 # hydros-sso-demo-client
 
 Minimal relying-party demo app for Hydros SSO endpoints served by `hydros-data-app` (`http://localhost:7071` by default).
+This demo uses `private_key_jwt` with `ES256` and validates `id_token` via SSO JWKS.
 
 ## Flow
 
