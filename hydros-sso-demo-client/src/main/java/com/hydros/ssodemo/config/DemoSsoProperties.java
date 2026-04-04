@@ -11,7 +11,8 @@ public class DemoSsoProperties {
 
     private String issuer = "http://localhost:7071";
     private String clientId = "demo-client";
-    private String clientSecret = "demo-client-secret";
+    private String clientPrivateKeyPath = "classpath:keys/demo-client-private.pem";
+    private long clientAssertionTtlSeconds = 300;
     private String redirectUri = "http://localhost:9091/callback";
     private String scope = "openid profile";
 }

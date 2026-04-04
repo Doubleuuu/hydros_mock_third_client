@@ -13,6 +13,7 @@ demo:
   sso:
     issuer: http://localhost:7071
     client-id: demo-client
-    client-secret: demo-client-secret
+    client-private-key-path: classpath:keys/demo-client-private.pem
+    client-assertion-ttl-seconds: 300
     redirect-uri: http://localhost:9091/callback
     scope: openid profile
