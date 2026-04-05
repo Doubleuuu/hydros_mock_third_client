@@ -114,11 +114,8 @@
     </dependencyManagement>
 
     <modules>
-        <module>hydros-mybatis</module>
-        <module>hydros-account-biz</module>
-        <module>hydros-data-app</module>
-        <module>hydros-sso-app</module>
         <module>hydros-sso-demo-client</module>
+        <module>hydros-sso-demo-client2</module>
     </modules>
 
     <build>

@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: hydros-sso-demo-client2
+
+server:
+  port: 9092
+  servlet:
+    session:
+      cookie:
+        name: HYDROS_DEMO_SID2
+
+demo:
+  sso:
+    issuer: http://localhost:7071
+    client-id: demo-client2
+    client-private-key-path: classpath:keys/demo-client-private.pem
+    client-assertion-ttl-seconds: 300
+    redirect-uri: http://localhost:9092/callback
+    scope: openid profile

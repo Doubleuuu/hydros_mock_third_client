@@ -66,7 +66,7 @@ public class DemoClientController {
                   </style>
                 </head>
                 <body>
-                  <h1>Hydros OIDC Demo Client</h1>
+                  <h1>Hydros OIDC Demo Client 2</h1>
                   <a class="btn" href="/demo/login">Start Login</a>
                   <a class="btn alt" href="/demo/refresh">Refresh Token</a>
                   <a class="btn warn" href="/demo/sso-logout">SSO Logout</a>
