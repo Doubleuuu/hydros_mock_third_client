@@ -9,8 +9,6 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -21,18 +19,18 @@ import java.security.AlgorithmParameters;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
+import java.security.Signature;
+import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
+import java.security.interfaces.RSAPrivateKey;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.ECParameterSpec;
 import java.security.spec.ECPoint;
 import java.security.spec.ECPublicKeySpec;
 import java.security.spec.PKCS8EncodedKeySpec;
-import java.time.Instant;
 import java.util.Base64;
 import java.util.Collection;
-import java.util.Date;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Demo OIDC 服务。
@@ -40,7 +38,6 @@ import java.util.UUID;
 @Service
 public class DemoOidcService {
 
-    private static final String ASSERTION_TYPE = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
     private static final String EC_CURVE_P256 = "P-256";
 
     private final DemoSsoProperties properties;
@@ -81,7 +78,7 @@ public class DemoOidcService {
      * @return 授权地址
      */
     public String buildAuthorizeUrl(String state, String nonce, String redirectUri) {
-        return UriComponentsBuilder.fromUriString(properties.getIssuer() + "/oauth2/authorize")
+        return UriComponentsBuilder.fromUriString(properties.getIssuer() + "/sso/api/oauth2/authorize")
                 .queryParam("response_type", "code")
                 .queryParam("client_id", properties.getClientId())
                 .queryParam("redirect_uri", redirectUri)
@@ -104,14 +101,13 @@ public class DemoOidcService {
 
     /**
      * 构建 SSO 统一登出入口地址。
-     * 会附带当前客户端ID和可选回跳地址。
      *
      * @param postLogoutRedirectUri 登出后回跳地址
      * @return SSO 登出入口地址
      */
     public String buildSsoLogoutUrl(String postLogoutRedirectUri) {
         UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(properties.getIssuer())
-                .path("/sso/logout")
+                .path("/sso/api/logout")
                 .queryParam("client_id", properties.getClientId());
         if (postLogoutRedirectUri != null && !postLogoutRedirectUri.isBlank()) {
             builder.queryParam("post_logout_redirect_uri", postLogoutRedirectUri);
@@ -125,13 +121,13 @@ public class DemoOidcService {
     /**
      * 构建 SSO 统一登出入口地址。
      *
-     * @param clientId 客户端ID
+     * @param clientId 客户端 ID
      * @param postLogoutRedirectUri 登出后回跳地址
      * @return SSO 登出入口地址
      */
     public String buildSsoLogoutUrl(String clientId, String postLogoutRedirectUri) {
         UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(properties.getIssuer())
-                .path("/sso/logout");
+                .path("/sso/api/logout");
         if (clientId != null && !clientId.isBlank()) {
             builder.queryParam("client_id", clientId);
         }
@@ -156,17 +152,26 @@ public class DemoOidcService {
 
     /**
      * 使用授权码换取令牌。
+     * 此处保留 redirectUri 参数仅为兼容调用方，当前协议不再使用该参数。
      *
      * @param code 授权码
-     * @param redirectUri 回调地址
+     * @param redirectUri 回调地址（兼容参数，当前不会发送）
      * @return 令牌响应
      */
     public Map<String, Object> exchangeAuthorizationCode(String code, String redirectUri) {
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("grant_type", "authorization_code");
-        form.add("code", code);
-        form.add("redirect_uri", redirectUri);
-        return postTokenForm(form);
+        Map<String, Object> requestBody = Map.of(
+                "clientId", properties.getClientId(),
+                "code", code,
+                "codeSignature", signCode(code)
+        );
+        Map<String, Object> response = restClient.post()
+                .uri(properties.getIssuer() + "/sso/api/oauth2/token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(requestBody)
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {
+                });
+        return unwrapTokenData(response);
     }
 
     /**
@@ -176,10 +181,18 @@ public class DemoOidcService {
      * @return 令牌响应
      */
     public Map<String, Object> refreshByToken(String refreshToken) {
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("grant_type", "refresh_token");
-        form.add("refresh_token", refreshToken);
-        return postTokenForm(form);
+        Map<String, Object> requestBody = Map.of(
+                "clientId", properties.getClientId(),
+                "refreshToken", refreshToken
+        );
+        Map<String, Object> response = restClient.post()
+                .uri(properties.getIssuer() + "/sso/api/oauth2/refresh_token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(requestBody)
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {
+                });
+        return unwrapTokenData(response);
     }
 
     /**
@@ -216,33 +229,22 @@ public class DemoOidcService {
         }
     }
 
-    private Map<String, Object> postTokenForm(MultiValueMap<String, String> form) {
-        String tokenEndpoint = properties.getIssuer() + "/oauth2/token";
-        form.set("client_id", properties.getClientId());
-        form.set("client_assertion_type", ASSERTION_TYPE);
-        form.set("client_assertion", buildClientAssertion(tokenEndpoint));
-
-        return restClient.post()
-                .uri(tokenEndpoint)
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(form)
-                .retrieve()
-                .body(new ParameterizedTypeReference<>() {
-                });
-    }
-
-    private String buildClientAssertion(String tokenEndpoint) {
-        Instant now = Instant.now();
-        return Jwts.builder()
-                .issuer(properties.getClientId())
-                .subject(properties.getClientId())
-                .audience().add(tokenEndpoint).and()
-                .id(UUID.randomUUID().toString())
-                .issuedAt(Date.from(now))
-                .notBefore(Date.from(now.minusSeconds(5)))
-                .expiration(Date.from(now.plusSeconds(properties.getClientAssertionTtlSeconds())))
-                .signWith(clientPrivateKey)
-                .compact();
+    /**
+     * 对授权码进行签名。
+     *
+     * @param code 授权码
+     * @return Base64URL 编码后的签名值
+     */
+    private String signCode(String code) {
+        try {
+            Signature signature = Signature.getInstance(resolveSignatureAlgorithm(clientPrivateKey));
+            signature.initSign(clientPrivateKey);
+            signature.update(code.getBytes(StandardCharsets.UTF_8));
+            byte[] rawSignature = signature.sign();
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(rawSignature);
+        } catch (GeneralSecurityException ex) {
+            throw new IllegalStateException("Failed to sign authorization code", ex);
+        }
     }
 
     private PrivateKey loadPrivateKey(ResourceLoader resourceLoader, String path) {
@@ -261,11 +263,38 @@ public class DemoOidcService {
                     .replace("-----END PRIVATE KEY-----", "")
                     .replaceAll("\\s+", "");
             byte[] keyBytes = Base64.getDecoder().decode(normalized);
-            KeyFactory factory = KeyFactory.getInstance("EC");
-            return factory.generatePrivate(new PKCS8EncodedKeySpec(keyBytes));
-        } catch (IOException | GeneralSecurityException ex) {
+
+            PrivateKey ecPrivateKey = tryParsePrivateKey("EC", keyBytes);
+            if (ecPrivateKey != null) {
+                return ecPrivateKey;
+            }
+            PrivateKey rsaPrivateKey = tryParsePrivateKey("RSA", keyBytes);
+            if (rsaPrivateKey != null) {
+                return rsaPrivateKey;
+            }
+            throw new IllegalStateException("Unsupported client private key type");
+        } catch (IOException ex) {
             throw new IllegalStateException("Failed to load client private key", ex);
         }
+    }
+
+    private PrivateKey tryParsePrivateKey(String algorithm, byte[] keyBytes) {
+        try {
+            KeyFactory factory = KeyFactory.getInstance(algorithm);
+            return factory.generatePrivate(new PKCS8EncodedKeySpec(keyBytes));
+        } catch (GeneralSecurityException ex) {
+            return null;
+        }
+    }
+
+    private String resolveSignatureAlgorithm(PrivateKey privateKey) {
+        if (privateKey instanceof ECPrivateKey) {
+            return "SHA256withECDSA";
+        }
+        if (privateKey instanceof RSAPrivateKey) {
+            return "SHA256withRSA";
+        }
+        throw new IllegalStateException("Unsupported client private key type");
     }
 
     @SuppressWarnings("unchecked")
@@ -279,7 +308,7 @@ public class DemoOidcService {
         String kid = (String) header.get("kid");
 
         Map<String, Object> jwks = restClient.get()
-                .uri(properties.getIssuer() + "/oauth2/jwks")
+                .uri(properties.getIssuer() + "/sso/api/oauth2/jwks")
                 .retrieve()
                 .body(new ParameterizedTypeReference<>() {
                 });
@@ -341,5 +370,50 @@ public class DemoOidcService {
             return collection.stream().map(String::valueOf).anyMatch(expectedClientId::equals);
         }
         return false;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> unwrapTokenData(Map<String, Object> response) {
+        if (response == null) {
+            throw new IllegalStateException("Token API response is empty");
+        }
+
+        Object data = response.get("data");
+        if (data instanceof Map<?, ?> dataMap) {
+            return (Map<String, Object>) dataMap;
+        }
+
+        if (response.containsKey("access_token") || response.containsKey("id_token")) {
+            return response;
+        }
+
+        String message = resolveResultMessage(response);
+        throw new IllegalStateException("Token API failed: " + message);
+    }
+
+    private String resolveResultMessage(Map<String, Object> response) {
+        String msg = firstNonBlank(
+                stringValue(response.get("msg")),
+                stringValue(response.get("message")),
+                stringValue(response.get("error_description")),
+                stringValue(response.get("error"))
+        );
+        return msg == null ? "unknown error" : msg;
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 }

@@ -14,6 +14,5 @@ demo:
     issuer: http://localhost:7071
     client-id: demo-client2
     client-private-key-path: classpath:keys/demo-client-private.pem
-    client-assertion-ttl-seconds: 300
     redirect-uri: http://localhost:9092/callback
     scope: openid profile
